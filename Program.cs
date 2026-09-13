@@ -537,7 +537,8 @@ internal sealed class FullPanelForm : Form
         mini.Click += (_, _) => MiniRequested?.Invoke(this, EventArgs.Empty);
         var refresh = MakeButton("↻", 312, 6, 34, 30, 12f);
         refresh.Click += (_, _) => RefreshRequested?.Invoke(this, EventArgs.Empty);
-        pinButton = MakeButton("◆", 346, 6, 34, 30, 10f);
+        pinButton = MakeButton("", 346, 6, 34, 30, 10f);
+        pinButton.Paint += PaintPinButton;
         pinButton.Click += (_, _) => TopMostChangedByUser?.Invoke(!TopMost);
         var close = MakeButton("×", 380, 6, 34, 30, 13f);
         close.Click += (_, _) => HideRequested?.Invoke(this, EventArgs.Empty);
@@ -584,6 +585,38 @@ internal sealed class FullPanelForm : Form
     public void SetPinState(bool topMost)
     {
         pinButton.ForeColor = topMost ? Theme.Good : Theme.Muted;
+        pinButton.Invalidate();
+    }
+
+    private static void PaintPinButton(object? sender, PaintEventArgs e)
+    {
+        if (sender is not Button button) return;
+
+        var g = e.Graphics;
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        var color = button.ForeColor;
+        using var brush = new SolidBrush(color);
+        using var pen = new Pen(color, 1.6f)
+        {
+            StartCap = LineCap.Round,
+            EndCap = LineCap.Round,
+            LineJoin = LineJoin.Round
+        };
+
+        var cx = button.ClientSize.Width / 2f;
+        g.FillRoundedRectangle(brush, new RectangleF(cx - 6.5f, 6f, 13f, 4.2f), 1.6f);
+
+        var body = new[]
+        {
+            new PointF(cx - 4.2f, 10f),
+            new PointF(cx + 4.2f, 10f),
+            new PointF(cx + 3f, 16.5f),
+            new PointF(cx + 6.3f, 18.4f),
+            new PointF(cx - 6.3f, 18.4f),
+            new PointF(cx - 3f, 16.5f)
+        };
+        g.FillPolygon(brush, body);
+        g.DrawLine(pen, cx, 18.2f, cx, 25f);
     }
 
     public void Render(UsageResult? usage, DateTime updated)
@@ -778,7 +811,7 @@ internal sealed class MiniWidgetForm : Form
     {
         var five = usage?.FiveHour ?? usage?.FirstWindow;
         gauge.Percent = five?.RemainingPercent;
-        gauge.ResetText = five == null ? "" : ShortReset(five.ResetAtEpoch);
+        gauge.ResetCaption = five == null ? "" : ShortReset(five.ResetAtEpoch);
         if (usage?.Weekly != null)
         {
             weeklyLabel.Text = $"Неделя {Math.Round(usage.Weekly.RemainingPercent):0}%";
@@ -876,7 +909,7 @@ internal sealed class MiniWidgetForm : Form
 internal sealed class MiniGauge : Control
 {
     public double? Percent { get; set; }
-    public string ResetText { get; set; } = "";
+    public string ResetCaption { get; set; } = "";
 
     public MiniGauge()
     {
@@ -914,8 +947,24 @@ internal sealed class MiniGauge : Control
         using var fmt = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
         g.DrawString("5 ЧАСОВ", captionFont, captionBrush, new RectangleF(25, 33, 76, 18), fmt);
         g.DrawString(pctText, pctFont, pctBrush, new RectangleF(17, 48, 92, 43), fmt);
-        if (!string.IsNullOrWhiteSpace(ResetText))
-            g.DrawString(ResetText, resetFont, resetBrush, new RectangleF(23, 88, 80, 17), fmt);
+        if (!string.IsNullOrWhiteSpace(ResetCaption))
+            g.DrawString(ResetCaption, resetFont, resetBrush, new RectangleF(23, 88, 80, 17), fmt);
+    }
+}
+
+
+internal static class DrawingExtensions
+{
+    public static void FillRoundedRectangle(this Graphics g, Brush brush, RectangleF rect, float radius)
+    {
+        using var path = new GraphicsPath();
+        var d = radius * 2f;
+        path.AddArc(rect.X, rect.Y, d, d, 180, 90);
+        path.AddArc(rect.Right - d, rect.Y, d, d, 270, 90);
+        path.AddArc(rect.Right - d, rect.Bottom - d, d, d, 0, 90);
+        path.AddArc(rect.X, rect.Bottom - d, d, d, 90, 90);
+        path.CloseFigure();
+        g.FillPath(brush, path);
     }
 }
 
